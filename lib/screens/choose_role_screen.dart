@@ -40,7 +40,7 @@ class ChooseRoleScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (context) => HomeScreen()),
                   );
                 },
-                child: Text('Register as patient'),
+                child: Text('I am a patient'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
@@ -72,7 +72,7 @@ class ChooseRoleScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (context) => familyId()),
                   );
                 },
-                child: Text('Register as Caregiver'),
+                child: Text('I am a Caregiver'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
