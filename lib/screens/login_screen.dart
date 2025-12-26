@@ -43,9 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -66,9 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SnackBar(content: Text('Reset email sent if account exists')),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send reset email: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send reset email: $e')));
     }
   }
 
@@ -80,18 +76,18 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SizedBox(height: 20),
-              Text(
+              const SizedBox(height: 20),
+              const Text(
                 'Welcome back! Glad\nto see you, Again!',
                 style: TextStyle(
                   fontSize: 28,
@@ -99,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: primaryColor,
                 ),
               ),
-              SizedBox(height: 40),
+              const SizedBox(height: 40),
               TextField(
                 controller: _emailCtrl,
                 decoration: InputDecoration(
@@ -112,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               TextField(
                 controller: _passwordCtrl,
                 obscureText: _obscurePassword,
@@ -126,9 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
                     ),
                     onPressed: () => setState(() {
                       _obscurePassword = !_obscurePassword;
@@ -136,24 +130,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 10),
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _forgotPassword,
-                  child: Text(
+                  child: const Text(
                     'Forgot Password?',
                     style: TextStyle(color: primaryColor),
                   ),
                 ),
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _loading ? null : _doLogin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50),
+                  minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -169,8 +163,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     : const Text('Login'),
               ),
-              SizedBox(height: 30),
-              Row(
+              const SizedBox(height: 30),
+              const Row(
                 children: <Widget>[
                   Expanded(child: Divider()),
                   Padding(
@@ -180,40 +174,48 @@ class _LoginScreenState extends State<LoginScreen> {
                   Expanded(child: Divider()),
                 ],
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
+              // GOOGLE SIGN IN BUTTON
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () async {
+                  try {
+                    await auth.signInWithGoogle();
+                    // AuthGate handles redirection once logic completes
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Google Login Failed: $e')),
+                    );
+                  }
+                },
                 icon: Image.asset(
                   'assets/images/google.png',
                   height: 24,
-                ), // Make sure to add google logo to assets
-                label: Text(
+                ),
+                label: const Text(
                   'Continue with Google',
                   style: TextStyle(color: Colors.black),
                 ),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.grey[300]!),
-                  minimumSize: Size(double.infinity, 50),
+                  minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
-              Spacer(),
+              const SizedBox(height: 40),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
-                  Text("Don't have an account?"),
+                  const Text("Don't have an account?"),
                   TextButton(
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => RegisterScreen(),
-                        ),
+                        MaterialPageRoute(builder: (context) => const RegisterScreen()),
                       );
                     },
-                    child: Text(
+                    child: const Text(
                       'Register',
                       style: TextStyle(
                         color: primaryColor,

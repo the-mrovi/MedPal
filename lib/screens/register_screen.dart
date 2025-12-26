@@ -37,17 +37,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordCtrl.text;
     final confirm = _confirmPasswordCtrl.text;
 
-    if (username.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
+    if (username.isEmpty ||
+        email.isEmpty ||
+        phone.isEmpty ||
+        password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
       );
       return;
     }
-    
+
     if (password != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
 
@@ -63,7 +66,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       if (response.user != null) {
-        // Correctly passing the userId to the next screen
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -72,9 +74,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Registration failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      await auth.signInWithGoogle();
+      // After returning to the app, try to read current user id.
+      final userId = await auth.getCurrentUserId();
+      if (!mounted) return;
+      if (userId != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ChooseRoleScreen(userId: userId)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google sign-in did not complete. Please try again.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -92,33 +123,90 @@ class _RegisterScreenState extends State<RegisterScreen> {
           children: [
             const Text(
               'Hello! Register to get started',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryColor),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: primaryColor,
+              ),
             ),
             const SizedBox(height: 30),
             _buildTextField(_usernameCtrl, 'Username'),
             const SizedBox(height: 15),
             _buildTextField(_emailCtrl, 'Email'),
             const SizedBox(height: 15),
-            _buildTextField(_phoneCtrl, 'Phone number', keyboard: TextInputType.phone),
+            _buildTextField(
+              _phoneCtrl,
+              'Phone number',
+              keyboard: TextInputType.phone,
+            ),
             const SizedBox(height: 15),
-            _buildPasswordField(_passwordCtrl, 'Password', _obscurePassword, () {
-              setState(() => _obscurePassword = !_obscurePassword);
-            }),
+            _buildPasswordField(
+              _passwordCtrl,
+              'Password',
+              _obscurePassword,
+              () {
+                setState(() => _obscurePassword = !_obscurePassword);
+              },
+            ),
             const SizedBox(height: 15),
-            _buildPasswordField(_confirmPasswordCtrl, 'Confirm password', _obscureConfirm, () {
-              setState(() => _obscureConfirm = !_obscureConfirm);
-            }),
+            _buildPasswordField(
+              _confirmPasswordCtrl,
+              'Confirm password',
+              _obscureConfirm,
+              () {
+                setState(() => _obscureConfirm = !_obscureConfirm);
+              },
+            ),
             const SizedBox(height: 30),
             ElevatedButton(
               onPressed: _loading ? null : _doRegister,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: _loading 
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Text('Register', style: TextStyle(color: Colors.white, fontSize: 16)),
+              child: _loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Register',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: const [
+                Expanded(child: Divider()),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text('or'),
+                ),
+                Expanded(child: Divider()),
+              ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _continueWithGoogle,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                side: BorderSide(color: primaryColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon:  Image.asset(
+                  'assets/images/google.png',
+                  height: 24,
+                ),
+              label: const Text('Continue with Google'),
             ),
           ],
         ),
@@ -126,7 +214,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController ctrl, String label, {TextInputType? keyboard}) {
+  Widget _buildTextField(
+    TextEditingController ctrl,
+    String label, {
+    TextInputType? keyboard,
+  }) {
     return TextField(
       controller: ctrl,
       keyboardType: keyboard,
@@ -134,12 +226,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
         labelText: label,
         filled: true,
         fillColor: secondaryColor,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
 
-  Widget _buildPasswordField(TextEditingController ctrl, String label, bool obscure, VoidCallback toggle) {
+  Widget _buildPasswordField(
+    TextEditingController ctrl,
+    String label,
+    bool obscure,
+    VoidCallback toggle,
+  ) {
     return TextField(
       controller: ctrl,
       obscureText: obscure,
@@ -147,8 +247,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         labelText: label,
         filled: true,
         fillColor: secondaryColor,
-        suffixIcon: IconButton(icon: Icon(obscure ? Icons.visibility_off : Icons.visibility), onPressed: toggle),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        suffixIcon: IconButton(
+          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+          onPressed: toggle,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }

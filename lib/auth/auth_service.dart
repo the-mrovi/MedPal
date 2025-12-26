@@ -2,7 +2,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 final SupabaseClient _supabase = Supabase.instance.client;
 
-// 1. Generic sign up: Saves name and phone to metadata
+// 1. Google Sign In
+Future<void> signInWithGoogle() async {
+  await _supabase.auth.signInWithOAuth(
+    OAuthProvider.google,
+    // Ensure this matches the redirect URL configured in your Supabase Dashboard
+    redirectTo: 'io.supabase.medpal://login-callback/',
+  );
+}
+
+// 2. Generic sign up: Saves name and phone to metadata
 Future<AuthResponse> signUpBasic({
   required String email,
   required String password,
@@ -12,14 +21,11 @@ Future<AuthResponse> signUpBasic({
   return await _supabase.auth.signUp(
     email: email,
     password: password,
-    data: {
-      'full_name': username, 
-      'phone': phone,
-    },
+    data: {'full_name': username, 'phone': phone},
   );
 }
 
-// 2. Standard Sign In
+// 3. Standard Sign In
 Future<AuthResponse> signIn({
   required String email,
   required String password,
@@ -40,33 +46,30 @@ String _generateFamilyId() {
   return 'MED-${ts.toRadixString(36).toUpperCase()}';
 }
 
-// 3. Completes Patient Profile
-// FIXED: Checks for active session to prevent "Not Authenticated" errors
+// 4. Completes Patient Profile
 Future<String> completePatientProfileForCurrentUser(String userId) async {
   final session = _supabase.auth.currentSession;
-  
-  // If session is null, it means the user isn't logged in yet 
-  // (Likely "Confirm Email" is enabled in Supabase settings)
+
   if (session == null) {
-    throw Exception('Authentication session not found. Please verify your email or check Supabase settings.');
+    throw Exception(
+      'Authentication session not found. Please verify your email or check Supabase settings.',
+    );
   }
 
   final user = session.user;
   final meta = user.userMetadata ?? {};
-  
+
   final name = (meta['full_name'] ?? 'User').toString();
   final phone = (meta['phone'] ?? '').toString();
   final familyId = _generateFamilyId();
 
   try {
-    // Update the master profile
     await _supabase.from('profiles').upsert({
       'id': userId,
       'full_name': name,
       'user_role': 'patient',
     });
 
-    // Create the patient entry with the Family ID
     await _supabase.from('patients').upsert({
       'id': userId,
       'family_id': familyId,
@@ -79,7 +82,7 @@ Future<String> completePatientProfileForCurrentUser(String userId) async {
   }
 }
 
-// 4. Completes Caregiver Profile: Links to patient by family_id
+// 5. Completes Caregiver Profile: Links to patient by family_id
 Future<String> completeCaregiverProfileForCurrentUser({
   required String familyIdFromParent,
 }) async {
@@ -94,13 +97,13 @@ Future<String> completeCaregiverProfileForCurrentUser({
   final patientData = await _supabase
       .from('patients')
       .select('id')
-      .eq('family_id', familyIdFromParent)
+      .eq('family_id', familyIdFromParent.trim().toUpperCase())
       .maybeSingle();
 
   if (patientData == null) {
     throw Exception('Family ID not found');
   }
-  
+
   final patientId = patientData['id'] as String;
 
   try {
@@ -110,10 +113,7 @@ Future<String> completeCaregiverProfileForCurrentUser({
       'user_role': 'caregiver',
     });
 
-    await _supabase.from('caregivers').upsert({
-      'id': user.id,
-      'phone': phone,
-    });
+    await _supabase.from('caregivers').upsert({'id': user.id, 'phone': phone});
 
     await _supabase.from('patient_caregiver_link').upsert({
       'patient_id': patientId,
@@ -134,7 +134,6 @@ Future<String> completeCaregiverProfileForCurrentUser({
 
 // --- Helper queries used by UI ---
 
-/// Returns the current user's role from the profiles table.
 Future<String?> getCurrentUserRole() async {
   final user = _supabase.auth.currentUser;
   if (user == null) return null;
@@ -148,7 +147,6 @@ Future<String?> getCurrentUserRole() async {
   return profile?['user_role'] as String?;
 }
 
-/// If the current user is a patient, returns their family_id.
 Future<String?> getMyFamilyIdIfPatient() async {
   final user = _supabase.auth.currentUser;
   if (user == null) return null;
@@ -162,7 +160,6 @@ Future<String?> getMyFamilyIdIfPatient() async {
   return patient?['family_id'] as String?;
 }
 
-/// For caregivers, returns the linked patient's name.
 Future<String?> getLinkedPatientNameIfCaregiver() async {
   final user = _supabase.auth.currentUser;
   if (user == null) return null;
@@ -183,4 +180,9 @@ Future<String?> getLinkedPatientNameIfCaregiver() async {
       .maybeSingle();
 
   return profile?['full_name'] as String?;
+}
+
+/// Returns the currently authenticated user's id, or null if not signed in.
+Future<String?> getCurrentUserId() async {
+  return _supabase.auth.currentUser?.id;
 }
