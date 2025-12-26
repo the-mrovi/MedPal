@@ -1,9 +1,78 @@
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
 import 'package:medpal/screens/home_screen.dart';
+import 'package:medpal/auth/auth_service.dart' as auth;
 
-class familyId extends StatelessWidget {
-  const familyId({super.key});
+class FamilyIdScreen extends StatefulWidget {
+  final String userId; // Receives the ID from ChooseRoleScreen
+  const FamilyIdScreen({super.key, required this.userId});
+
+  @override
+  State<FamilyIdScreen> createState() => _FamilyIdScreenState();
+}
+
+class _FamilyIdScreenState extends State<FamilyIdScreen> {
+  final _familyCtrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _familyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _linkCaregiver() async {
+    final code = _familyCtrl.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter the Family ID')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      // The auth service will throw an error if the ID doesn't exist
+      final patientName = await auth.completeCaregiverProfileForCurrentUser(
+        familyIdFromParent: code,
+      );
+
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Linked!'),
+          content: Text('You are now the caregiver of $patientName.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      // Only navigate to Home if the try block succeeds
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      // Handles invalid IDs or database errors
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().contains('not found') 
+              ? 'Invalid Family ID. Please check the code and try again.' 
+              : 'Linking failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +82,7 @@ class familyId extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -34,8 +103,9 @@ class familyId extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               TextField(
+                controller: _familyCtrl,
                 decoration: InputDecoration(
-                  labelText: 'Family ID from parent',
+                  labelText: 'Family ID from patient',
                   filled: true,
                   fillColor: secondaryColor,
                   border: OutlineInputBorder(
@@ -46,12 +116,7 @@ class familyId extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => HomeScreen()),
-                  );
-                },
+                onPressed: _loading ? null : _linkCaregiver,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
@@ -60,7 +125,16 @@ class familyId extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text('Continue'),
+                child: _loading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Continue'),
               ),
             ],
           ),

@@ -2,97 +2,95 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 final SupabaseClient _supabase = Supabase.instance.client;
 
-// Generic sign up with basic profile data
+// 1. Generic sign up: Saves name and phone to metadata
 Future<AuthResponse> signUpBasic({
   required String email,
   required String password,
   required String username,
   required String phone,
 }) async {
-  final response = await _supabase.auth.signUp(
+  return await _supabase.auth.signUp(
     email: email,
     password: password,
     data: {
-      'full_name': username,
+      'full_name': username, 
       'phone': phone,
     },
   );
-  return response;
 }
 
+// 2. Standard Sign In
 Future<AuthResponse> signIn({
   required String email,
   required String password,
 }) async {
-  final response = await _supabase.auth.signInWithPassword(
+  return await _supabase.auth.signInWithPassword(
     email: email,
     password: password,
   );
-  return response;
 }
 
 Future<void> signOut() async {
   await _supabase.auth.signOut();
 }
 
-Future<void> resetPassword({required String email}) async {
-  await _supabase.auth.resetPasswordForEmail(email);
-}
-
+// Helper to generate the unique ID for patients
 String _generateFamilyId() {
   final ts = DateTime.now().millisecondsSinceEpoch;
   return 'MED-${ts.toRadixString(36).toUpperCase()}';
 }
 
-// Registers a patient and returns the generated family_id
-Future<String> signUpPatient({
-  required String email,
-  required String password,
-  required String name,
-  String? age,
-  required String phone,
-}) async {
-  final String familyId = _generateFamilyId();
-
-  final response = await _supabase.auth.signUp(
-    email: email,
-    password: password,
-    data: {'full_name': name, 'user_role': 'patient'},
-  );
-
-  if (response.user == null) {
-    throw Exception('Sign up failed');
+// 3. Completes Patient Profile
+// FIXED: Checks for active session to prevent "Not Authenticated" errors
+Future<String> completePatientProfileForCurrentUser(String userId) async {
+  final session = _supabase.auth.currentSession;
+  
+  // If session is null, it means the user isn't logged in yet 
+  // (Likely "Confirm Email" is enabled in Supabase settings)
+  if (session == null) {
+    throw Exception('Authentication session not found. Please verify your email or check Supabase settings.');
   }
 
-  final userId = response.user!.id;
+  final user = session.user;
+  final meta = user.userMetadata ?? {};
+  
+  final name = (meta['full_name'] ?? 'User').toString();
+  final phone = (meta['phone'] ?? '').toString();
+  final familyId = _generateFamilyId();
 
-  // Create profile master record
-  await _supabase.from('profiles').insert({
-    'id': userId,
-    'full_name': name,
-    'user_role': 'patient',
-  });
+  try {
+    // Update the master profile
+    await _supabase.from('profiles').upsert({
+      'id': userId,
+      'full_name': name,
+      'user_role': 'patient',
+    });
 
-  // Insert patient details with generated family_id
-  await _supabase.from('patients').insert({
-    'id': userId,
-    'family_id': familyId,
-    if (age != null && age.trim().isNotEmpty) 'age': int.tryParse(age.trim()),
-    'phone': phone,
-  });
+    // Create the patient entry with the Family ID
+    await _supabase.from('patients').upsert({
+      'id': userId,
+      'family_id': familyId,
+      'phone': phone,
+    });
 
-  return familyId;
+    return familyId;
+  } catch (e) {
+    throw Exception('Database Error: $e');
+  }
 }
 
-// Sign up specifically for Caregivers
-Future<void> signUpCaregiver({
-  required String email,
-  required String password,
-  required String name,
-  required String phone,
-  required String familyIdFromParent, // Inputted by caregiver
+// 4. Completes Caregiver Profile: Links to patient by family_id
+Future<String> completeCaregiverProfileForCurrentUser({
+  required String familyIdFromParent,
 }) async {
-  // 1. First, check if the Family ID actually exists
+  final session = _supabase.auth.currentSession;
+  if (session == null) throw Exception('Not authenticated. Please log in.');
+
+  final user = session.user;
+  final meta = user.userMetadata ?? {};
+  final name = (meta['full_name'] ?? 'Caregiver').toString();
+  final phone = (meta['phone'] ?? '').toString();
+
   final patientData = await _supabase
       .from('patients')
       .select('id')
@@ -100,36 +98,89 @@ Future<void> signUpCaregiver({
       .maybeSingle();
 
   if (patientData == null) {
-    throw Exception("Family ID not found. Please check with your parent.");
+    throw Exception('Family ID not found');
   }
+  
+  final patientId = patientData['id'] as String;
 
-  // 2. Sign up user
-  final response = await _supabase.auth.signUp(
-    email: email,
-    password: password,
-    data: {'full_name': name, 'user_role': 'caregiver'},
-  );
-
-  if (response.user != null) {
-    final userId = response.user!.id;
-
-    // 2.1 Create profile master record
-    await _supabase.from('profiles').insert({
-      'id': userId,
+  try {
+    await _supabase.from('profiles').upsert({
+      'id': user.id,
       'full_name': name,
       'user_role': 'caregiver',
     });
 
-    // 3. Insert into caregivers table
-    await _supabase.from('caregivers').insert({
-      'id': userId,
+    await _supabase.from('caregivers').upsert({
+      'id': user.id,
       'phone': phone,
     });
 
-    // 4. Create the link between them
-    await _supabase.from('patient_caregiver_link').insert({
-      'patient_id': patientData['id'],
-      'caregiver_id': userId,
+    await _supabase.from('patient_caregiver_link').upsert({
+      'patient_id': patientId,
+      'caregiver_id': user.id,
     });
+
+    final profile = await _supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', patientId)
+        .maybeSingle();
+
+    return (profile?['full_name'] ?? 'Patient') as String;
+  } catch (e) {
+    throw Exception('Failed to link caregiver: $e');
   }
+}
+
+// --- Helper queries used by UI ---
+
+/// Returns the current user's role from the profiles table.
+Future<String?> getCurrentUserRole() async {
+  final user = _supabase.auth.currentUser;
+  if (user == null) return null;
+
+  final profile = await _supabase
+      .from('profiles')
+      .select('user_role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+  return profile?['user_role'] as String?;
+}
+
+/// If the current user is a patient, returns their family_id.
+Future<String?> getMyFamilyIdIfPatient() async {
+  final user = _supabase.auth.currentUser;
+  if (user == null) return null;
+
+  final patient = await _supabase
+      .from('patients')
+      .select('family_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+  return patient?['family_id'] as String?;
+}
+
+/// For caregivers, returns the linked patient's name.
+Future<String?> getLinkedPatientNameIfCaregiver() async {
+  final user = _supabase.auth.currentUser;
+  if (user == null) return null;
+
+  final link = await _supabase
+      .from('patient_caregiver_link')
+      .select('patient_id')
+      .eq('caregiver_id', user.id)
+      .maybeSingle();
+
+  final patientId = link?['patient_id'] as String?;
+  if (patientId == null) return null;
+
+  final profile = await _supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', patientId)
+      .maybeSingle();
+
+  return profile?['full_name'] as String?;
 }

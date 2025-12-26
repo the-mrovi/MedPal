@@ -3,6 +3,7 @@ import 'package:medpal/constants.dart';
 import 'package:medpal/screens/home_screen.dart';
 import 'package:medpal/screens/register_screen.dart';
 import 'package:medpal/auth/auth_service.dart' as auth;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -59,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     try {
-      await auth.resetPassword(email: email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Reset email sent if account exists')),
