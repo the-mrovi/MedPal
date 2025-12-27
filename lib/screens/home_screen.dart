@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
-import 'package:medpal/auth/auth_service.dart' as auth;
+import 'package:medpal/auth/auth_service.dart'; // Standard import to access the class
 import 'package:medpal/screens/welcome_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -19,29 +19,34 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               try {
-                await auth.signOut();
+                // FIX 1: Access signOut through the Singleton instance
+                await AuthService.instance.signOut();
                 if (!context.mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const WelcomeScreen()),
                   (route) => false,
                 );
               } catch (e) {
-                // Handle logout error if any
+                debugPrint('Logout error: $e');
               }
             },
           ),
         ],
       ),
       body: FutureBuilder<String?>(
-        future: auth.getCurrentUserRole(),
+        // FIX 2: Access role check through the Singleton instance
+        future: AuthService.instance.getCurrentUserRole(),
         builder: (context, snapRole) {
           if (snapRole.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          
           final role = snapRole.data;
+          
           if (role == 'patient') {
             return FutureBuilder<String?>(
-              future: auth.getMyFamilyIdIfPatient(),
+              // FIX 3: Access family ID check through the Singleton instance
+              future: AuthService.instance.getMyFamilyIdIfPatient(),
               builder: (context, snapFam) {
                 if (snapFam.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -56,7 +61,8 @@ class HomeScreen extends StatelessWidget {
             );
           } else if (role == 'caregiver') {
             return FutureBuilder<String?>(
-              future: auth.getLinkedPatientNameIfCaregiver(),
+              // FIX 4: Access patient name check through the Singleton instance
+              future: AuthService.instance.getLinkedPatientNameIfCaregiver(),
               builder: (context, snapName) {
                 if (snapName.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -81,6 +87,7 @@ class _InfoCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String value;
+  
   const _InfoCard({
     required this.title,
     required this.subtitle,

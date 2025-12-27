@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
 import 'package:medpal/screens/choose_role_screen.dart';
-import 'package:medpal/auth/auth_service.dart' as auth;
+import 'package:medpal/auth/auth_service.dart'; // Ensure this matches your project structure
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -11,14 +11,15 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  // Controllers for input fields
   final _usernameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmPasswordCtrl = TextEditingController();
-  bool _obscurePassword = true;
-  bool _obscureConfirm = true;
+
   bool _loading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -30,6 +31,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  // Handle Standard Email/Password Registration
   Future<void> _doRegister() async {
     final username = _usernameCtrl.text.trim();
     final email = _emailCtrl.text.trim();
@@ -37,26 +39,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordCtrl.text;
     final confirm = _confirmPasswordCtrl.text;
 
-    if (username.isEmpty ||
-        email.isEmpty ||
-        phone.isEmpty ||
-        password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
-      );
+    if (username.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
+      _showSnackBar('Please fill in all fields');
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+      _showSnackBar('Passwords do not match');
       return;
     }
 
     setState(() => _loading = true);
     try {
-      final response = await auth.signUpBasic(
+      final response = await AuthService.instance.signUpBasic(
         email: email,
         password: password,
         username: username,
@@ -66,7 +61,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       if (response.user != null) {
-        Navigator.push(
+        // For email signup, we manually move to role selection
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => ChooseRoleScreen(userId: response.user!.id),
@@ -74,140 +70,112 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+      _showSnackBar('Registration failed: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
+  // Handle Google OAuth Registration
   Future<void> _continueWithGoogle() async {
     setState(() => _loading = true);
     try {
-      await auth.signInWithGoogle();
-      // After returning to the app, try to read current user id.
-      final userId = await auth.getCurrentUserId();
-      if (!mounted) return;
-      if (userId != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => ChooseRoleScreen(userId: userId)),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Google sign-in did not complete. Please try again.'),
-          ),
-        );
-      }
+      // Logic: Just trigger the sign-in. AuthGate is listening and will 
+      // automatically redirect the user once the browser returns.
+      await AuthService.instance.signInWithGoogle();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
+      _showSnackBar('Google login failed: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(backgroundColor: Colors.white, elevation: 0),
+      appBar: AppBar(
+        backgroundColor: Colors.white, 
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Hello! Register to get started',
+              'Create Account',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
                 color: primaryColor,
               ),
             ),
+            const SizedBox(height: 8),
+            const Text(
+              'Join MedPal+ to manage your health.',
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+            ),
             const SizedBox(height: 30),
-            _buildTextField(_usernameCtrl, 'Username'),
+            
+            _buildTextField(_usernameCtrl, 'Username', icon: Icons.person_outline),
             const SizedBox(height: 15),
-            _buildTextField(_emailCtrl, 'Email'),
+            _buildTextField(_emailCtrl, 'Email', icon: Icons.email_outlined, keyboard: TextInputType.emailAddress),
+            const SizedBox(height: 15),
+            _buildTextField(_phoneCtrl, 'Phone', icon: Icons.phone_outlined, keyboard: TextInputType.phone),
             const SizedBox(height: 15),
             _buildTextField(
-              _phoneCtrl,
-              'Phone number',
-              keyboard: TextInputType.phone,
+              _passwordCtrl, 
+              'Password', 
+              icon: Icons.lock_outline, 
+              obscure: _obscurePassword,
+              isPassword: true,
+              toggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
             const SizedBox(height: 15),
-            _buildPasswordField(
-              _passwordCtrl,
-              'Password',
-              _obscurePassword,
-              () {
-                setState(() => _obscurePassword = !_obscurePassword);
-              },
-            ),
-            const SizedBox(height: 15),
-            _buildPasswordField(
-              _confirmPasswordCtrl,
-              'Confirm password',
-              _obscureConfirm,
-              () {
-                setState(() => _obscureConfirm = !_obscureConfirm);
-              },
-            ),
+            _buildTextField(_confirmPasswordCtrl, 'Confirm Password', icon: Icons.lock_reset, obscure: true),
+            
             const SizedBox(height: 30),
+            
             ElevatedButton(
               onPressed: _loading ? null : _doRegister,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: _loading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text(
-                      'Register',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Register', style: TextStyle(color: Colors.white, fontSize: 18)),
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: const [
+            
+            const SizedBox(height: 20),
+            const Row(
+              children: [
                 Expanded(child: Divider()),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Text('or'),
-                ),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text("OR")),
                 Expanded(child: Divider()),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+            
             OutlinedButton.icon(
               onPressed: _loading ? null : _continueWithGoogle,
+              icon: Image.asset('assets/images/google.png', height: 24),
+              label: const Text('Continue with Google', style: TextStyle(color: Colors.black87, fontSize: 16)),
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-                side: BorderSide(color: primaryColor),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                minimumSize: const Size(double.infinity, 55),
+                side: const BorderSide(color: Colors.grey),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              icon:  Image.asset(
-                  'assets/images/google.png',
-                  height: 24,
-                ),
-              label: const Text('Continue with Google'),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -215,42 +183,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildTextField(
-    TextEditingController ctrl,
+    TextEditingController ctrl, 
     String label, {
+    required IconData icon,
+    bool obscure = false,
+    bool isPassword = false,
+    VoidCallback? toggleVisibility,
     TextInputType? keyboard,
   }) {
     return TextField(
       controller: ctrl,
+      obscureText: obscure,
       keyboardType: keyboard,
       decoration: InputDecoration(
         labelText: label,
+        prefixIcon: Icon(icon, color: primaryColor),
+        suffixIcon: isPassword 
+            ? IconButton(
+                icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+                onPressed: toggleVisibility,
+              )
+            : null,
         filled: true,
         fillColor: secondaryColor,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPasswordField(
-    TextEditingController ctrl,
-    String label,
-    bool obscure,
-    VoidCallback toggle,
-  ) {
-    return TextField(
-      controller: ctrl,
-      obscureText: obscure,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: secondaryColor,
-        suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
-          onPressed: toggle,
-        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,

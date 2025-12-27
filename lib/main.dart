@@ -16,9 +16,10 @@ Future<void> main() async {
   await Supabase.initialize(
     // Your Project URL
     url: 'https://rgmcjnfnfvzcerswtsym.supabase.co',
-    
+
     // Your Anon Public Key (The long text you provided)
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWNqbmZuZnZ6Y2Vyc3d0c3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1ODE1ODksImV4cCI6MjA4MjE1NzU4OX0.vugpk78AC44TRDB5W7hV2BvqnTIG5mpZlepjdSkmTSo',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJnbWNqbmZuZnZ6Y2Vyc3d0c3ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1ODE1ODksImV4cCI6MjA4MjE1NzU4OX0.vugpk78AC44TRDB5W7hV2BvqnTIG5mpZlepjdSkmTSo',
   );
 
   runApp(const MyApp());
@@ -37,7 +38,7 @@ class MyApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
         colorScheme: ColorScheme.fromSwatch().copyWith(secondary: accentColor),
       ),
-      home: WelcomeScreen(),
+      home: const WelcomeScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

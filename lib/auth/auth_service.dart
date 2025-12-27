@@ -1,188 +1,196 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-final SupabaseClient _supabase = Supabase.instance.client;
+class AuthService {
+  AuthService._privateConstructor();
+  static final AuthService instance = AuthService._privateConstructor();
 
-// 1. Google Sign In
-Future<void> signInWithGoogle() async {
-  await _supabase.auth.signInWithOAuth(
-    OAuthProvider.google,
-    // Ensure this matches the redirect URL configured in your Supabase Dashboard
-    redirectTo: 'io.supabase.medpal://login-callback/',
-  );
-}
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-// 2. Generic sign up: Saves name and phone to metadata
-Future<AuthResponse> signUpBasic({
-  required String email,
-  required String password,
-  required String username,
-  required String phone,
-}) async {
-  return await _supabase.auth.signUp(
-    email: email,
-    password: password,
-    data: {'full_name': username, 'phone': phone},
-  );
-}
+  // 1. Unified Google Sign In
+  Future<void> signInWithGoogle() async {
+    String? redirectUrl;
+    if (kIsWeb) {
+      // DYNAMIC REDIRECT: Automatically gets your current local port
+      redirectUrl = Uri.base.origin;
+    } else {
+      // MOBILE REDIRECT: Scheme for your Android phone
+      redirectUrl = 'io.supabase.medpal://login-callback/';
+    }
 
-// 3. Standard Sign In
-Future<AuthResponse> signIn({
-  required String email,
-  required String password,
-}) async {
-  return await _supabase.auth.signInWithPassword(
-    email: email,
-    password: password,
-  );
-}
-
-Future<void> signOut() async {
-  await _supabase.auth.signOut();
-}
-
-// Helper to generate the unique ID for patients
-String _generateFamilyId() {
-  final ts = DateTime.now().millisecondsSinceEpoch;
-  return 'MED-${ts.toRadixString(36).toUpperCase()}';
-}
-
-// 4. Completes Patient Profile
-Future<String> completePatientProfileForCurrentUser(String userId) async {
-  final session = _supabase.auth.currentSession;
-
-  if (session == null) {
-    throw Exception(
-      'Authentication session not found. Please verify your email or check Supabase settings.',
+    await _supabase.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: redirectUrl,
     );
   }
 
-  final user = session.user;
-  final meta = user.userMetadata ?? {};
+  // 2. Email/Password Auth
+  Future<AuthResponse> signUpBasic({
+    required String email,
+    required String password,
+    required String username,
+    required String phone,
+  }) async {
+    return await _supabase.auth.signUp(
+      email: email,
+      password: password,
+      data: {'full_name': username, 'phone': phone},
+    );
+  }
 
-  final name = (meta['full_name'] ?? 'User').toString();
-  final phone = (meta['phone'] ?? '').toString();
-  final familyId = _generateFamilyId();
+  Future<AuthResponse> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
 
-  try {
+  Future<void> signOut() async => await _supabase.auth.signOut();
+
+  Future<void> sendPasswordResetEmail({
+    required String email,
+    String? redirectTo,
+  }) async {
+    await _supabase.auth.resetPasswordForEmail(email, redirectTo: redirectTo);
+  }
+
+  // Helper for unique IDs
+  String _generateFamilyId() {
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    return 'MED-${ts.toRadixString(36).toUpperCase()}';
+  }
+
+  // 3. Profile Completion
+  Future<String> completePatientProfileForCurrentUser(String userId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('No user found');
+
+    final meta = user.userMetadata ?? {};
+    final name = (meta['full_name'] ?? 'User').toString();
+    final phone = (meta['phone'] ?? '').toString();
+    final familyId = _generateFamilyId();
+
     await _supabase.from('profiles').upsert({
       'id': userId,
       'full_name': name,
       'user_role': 'patient',
     });
-
     await _supabase.from('patients').upsert({
       'id': userId,
       'family_id': familyId,
       'phone': phone,
     });
-
     return familyId;
-  } catch (e) {
-    throw Exception('Database Error: $e');
-  }
-}
-
-// 5. Completes Caregiver Profile: Links to patient by family_id
-Future<String> completeCaregiverProfileForCurrentUser({
-  required String familyIdFromParent,
-}) async {
-  final session = _supabase.auth.currentSession;
-  if (session == null) throw Exception('Not authenticated. Please log in.');
-
-  final user = session.user;
-  final meta = user.userMetadata ?? {};
-  final name = (meta['full_name'] ?? 'Caregiver').toString();
-  final phone = (meta['phone'] ?? '').toString();
-
-  final patientData = await _supabase
-      .from('patients')
-      .select('id')
-      .eq('family_id', familyIdFromParent.trim().toUpperCase())
-      .maybeSingle();
-
-  if (patientData == null) {
-    throw Exception('Family ID not found');
   }
 
-  final patientId = patientData['id'] as String;
+  Future<String> completeCaregiverProfileForCurrentUser({
+    required String familyIdFromParent,
+  }) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('Not authenticated.');
 
-  try {
+    final meta = user.userMetadata ?? {};
+    final name = (meta['full_name'] ?? 'Caregiver').toString();
+    final phone = (meta['phone'] ?? '').toString();
+
+    final patientData = await _supabase
+        .from('patients')
+        .select('id')
+        .eq('family_id', familyIdFromParent.trim().toUpperCase())
+        .maybeSingle();
+
+    if (patientData == null) throw Exception('Family ID not found');
+
     await _supabase.from('profiles').upsert({
       'id': user.id,
       'full_name': name,
       'user_role': 'caregiver',
     });
-
     await _supabase.from('caregivers').upsert({'id': user.id, 'phone': phone});
-
     await _supabase.from('patient_caregiver_link').upsert({
-      'patient_id': patientId,
+      'patient_id': patientData['id'],
       'caregiver_id': user.id,
     });
 
+    final patientProfile = await _supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', patientData['id'])
+        .maybeSingle();
+    return (patientProfile?['full_name'] ?? 'Patient').toString();
+  }
+
+  // --- Getters ---
+  Future<String?> getCurrentUserRole() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    final profile = await _supabase
+        .from('profiles')
+        .select('user_role')
+        .eq('id', user.id)
+        .maybeSingle();
+    return profile?['user_role'] as String?;
+  }
+
+  Future<String?> getCurrentUserId() async => _supabase.auth.currentUser?.id;
+
+  Future<String?> getMyFamilyIdIfPatient() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    final patient = await _supabase
+        .from('patients')
+        .select('family_id')
+        .eq('id', user.id)
+        .maybeSingle();
+    return patient?['family_id'] as String?;
+  }
+
+  Future<String?> getLinkedPatientNameIfCaregiver() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    final link = await _supabase
+        .from('patient_caregiver_link')
+        .select('patient_id')
+        .eq('caregiver_id', user.id)
+        .maybeSingle();
+    if (link == null) return null;
     final profile = await _supabase
         .from('profiles')
         .select('full_name')
-        .eq('id', patientId)
+        .eq('id', link['patient_id'])
         .maybeSingle();
-
-    return (profile?['full_name'] ?? 'Patient') as String;
-  } catch (e) {
-    throw Exception('Failed to link caregiver: $e');
+    return profile?['full_name'] as String?;
   }
 }
 
-// --- Helper queries used by UI ---
-
-Future<String?> getCurrentUserRole() async {
-  final user = _supabase.auth.currentUser;
-  if (user == null) return null;
-
-  final profile = await _supabase
-      .from('profiles')
-      .select('user_role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-  return profile?['user_role'] as String?;
-}
-
-Future<String?> getMyFamilyIdIfPatient() async {
-  final user = _supabase.auth.currentUser;
-  if (user == null) return null;
-
-  final patient = await _supabase
-      .from('patients')
-      .select('family_id')
-      .eq('id', user.id)
-      .maybeSingle();
-
-  return patient?['family_id'] as String?;
-}
-
-Future<String?> getLinkedPatientNameIfCaregiver() async {
-  final user = _supabase.auth.currentUser;
-  if (user == null) return null;
-
-  final link = await _supabase
-      .from('patient_caregiver_link')
-      .select('patient_id')
-      .eq('caregiver_id', user.id)
-      .maybeSingle();
-
-  final patientId = link?['patient_id'] as String?;
-  if (patientId == null) return null;
-
-  final profile = await _supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', patientId)
-      .maybeSingle();
-
-  return profile?['full_name'] as String?;
-}
-
-/// Returns the currently authenticated user's id, or null if not signed in.
-Future<String?> getCurrentUserId() async {
-  return _supabase.auth.currentUser?.id;
-}
+// Top-level helpers for your screens
+Future<void> signInWithGoogle() => AuthService.instance.signInWithGoogle();
+Future<AuthResponse> signUpBasic({
+  required String email,
+  required String password,
+  required String username,
+  required String phone,
+}) => AuthService.instance.signUpBasic(
+  email: email,
+  password: password,
+  username: username,
+  phone: phone,
+);
+Future<AuthResponse> signIn({
+  required String email,
+  required String password,
+}) => AuthService.instance.signIn(email: email, password: password);
+Future<void> signOut() => AuthService.instance.signOut();
+Future<String> completePatientProfileForCurrentUser(String userId) =>
+    AuthService.instance.completePatientProfileForCurrentUser(userId);
+Future<String> completeCaregiverProfileForCurrentUser({
+  required String familyIdFromParent,
+}) => AuthService.instance.completeCaregiverProfileForCurrentUser(
+  familyIdFromParent: familyIdFromParent,
+);
+Future<String?> getCurrentUserRole() =>
+    AuthService.instance.getCurrentUserRole();
+Future<String?> getCurrentUserId() => AuthService.instance.getCurrentUserId();

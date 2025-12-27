@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
 import 'package:medpal/screens/home_screen.dart';
 import 'package:medpal/screens/register_screen.dart';
+import 'package:medpal/screens/forgot_password_screen.dart';
 import 'package:medpal/auth/auth_service.dart' as auth;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:medpal/screens/choose_role_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,11 +21,42 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
   bool _loading = false;
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Handle Google OAuth returning to the app
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+      event,
+    ) async {
+      final session = event.session;
+      if (session == null || !mounted) return;
+      final role = await auth.getCurrentUserRole();
+      if (!mounted) return;
+      if (role == 'patient' || role == 'caregiver') {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChooseRoleScreen(userId: session.user.id),
+          ),
+          (route) => false,
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _authSub?.cancel();
     super.dispose();
   }
 
@@ -43,29 +78,20 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _forgotPassword() async {
-    final email = _emailCtrl.text.trim();
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter your email to reset password')),
-      );
-      return;
-    }
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reset email sent if account exists')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send reset email: $e')));
-    }
+  // Forgot password now navigates to a dedicated screen
+  void _goToForgotPassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+    );
   }
 
   @override
@@ -122,7 +148,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                     ),
                     onPressed: () => setState(() {
                       _obscurePassword = !_obscurePassword;
@@ -134,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _forgotPassword,
+                  onPressed: _goToForgotPassword,
                   child: const Text(
                     'Forgot Password?',
                     style: TextStyle(color: primaryColor),
@@ -168,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: <Widget>[
                   Expanded(child: Divider()),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
                     child: Text('Or'),
                   ),
                   Expanded(child: Divider()),
@@ -187,10 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   }
                 },
-                icon: Image.asset(
-                  'assets/images/google.png',
-                  height: 24,
-                ),
+                icon: Image.asset('assets/images/google.png', height: 24),
                 label: const Text(
                   'Continue with Google',
                   style: TextStyle(color: Colors.black),
@@ -212,7 +237,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const RegisterScreen(),
+                        ),
                       );
                     },
                     child: const Text(
