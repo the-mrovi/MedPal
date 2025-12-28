@@ -4,7 +4,7 @@ import 'package:medpal/screens/home_screen.dart';
 import 'package:medpal/auth/auth_service.dart' as auth;
 
 class FamilyIdScreen extends StatefulWidget {
-  final String userId; // Receives the ID from ChooseRoleScreen
+  final String userId; 
   const FamilyIdScreen({super.key, required this.userId});
 
   @override
@@ -32,15 +32,18 @@ class _FamilyIdScreenState extends State<FamilyIdScreen> {
 
     setState(() => _loading = true);
     try {
-      // The auth service will throw an error if the ID doesn't exist
+      // FIXED: Added the userId parameter here
       final patientName = await auth.completeCaregiverProfileForCurrentUser(
+        userId: widget.userId, 
         familyIdFromParent: code,
       );
 
       if (!mounted) return;
 
+      // Show success dialog
       await showDialog(
         context: context,
+        barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: const Text('Linked!'),
           content: Text('You are now the caregiver of $patientName.'),
@@ -53,19 +56,23 @@ class _FamilyIdScreenState extends State<FamilyIdScreen> {
         ),
       );
 
-      // Only navigate to Home if the try block succeeds
+      if (!mounted) return;
+
+      // Navigate to Home and clear stack
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
         (route) => false,
       );
     } catch (e) {
-      // Handles invalid IDs or database errors
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString().contains('not found') 
-              ? 'Invalid Family ID. Please check the code and try again.' 
-              : 'Linking failed: $e'),
+          content: Text(
+            e.toString().contains('not found')
+                ? 'Invalid Family ID. Please check the code and try again.'
+                : 'Linking failed: $e',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -106,6 +113,7 @@ class _FamilyIdScreenState extends State<FamilyIdScreen> {
                 controller: _familyCtrl,
                 decoration: InputDecoration(
                   labelText: 'Family ID from patient',
+                  hintText: 'e.g., MED-XXXXXX',
                   filled: true,
                   fillColor: secondaryColor,
                   border: OutlineInputBorder(

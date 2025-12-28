@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:medpal/auth/auth_service.dart';
+import 'package:medpal/screens/reset_password_screen.dart'; // Create this file next
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -20,43 +20,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  Future<void> _sendReset() async {
+  Future<void> _sendOTP() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please enter your email')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email')),
+      );
       return;
     }
 
     setState(() => _sending = true);
     try {
-      // Optionally provide a redirect URL for web/mobile deep link handling
-      String? redirectUrl;
-      if (kIsWeb) {
-        redirectUrl = 'http://localhost:2034';
-      } else {
-        // Matches your OAuth redirect used in Android/iOS
-        redirectUrl = 'io.supabase.medpal://login-callback/';
-      }
-
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: redirectUrl,
-      );
+      // Calls the Supabase reset method
+      // Note: By default, Supabase sends a 6-digit OTP if configured in templates
+      await AuthService.instance.sendPasswordResetOTP(email);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('If the email exists, a reset link has been sent.'),
+
+      // Navigate to the OTP entry screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResetPasswordOTPScreen(email: email),
         ),
       );
-      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send reset email: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send OTP: $e')),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -67,7 +59,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Forgot Password'),
+        title: const Text('Reset Password'),
         backgroundColor: Colors.white,
         elevation: 0,
         foregroundColor: Colors.black,
@@ -77,9 +69,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
             const Text(
-              'Enter your account email to receive a password reset link.',
+              'Enter your email to receive a 6-digit reset code.',
               style: TextStyle(fontSize: 16, color: Colors.black87),
             ),
             const SizedBox(height: 20),
@@ -87,7 +78,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                labelText: 'Email',
+                labelText: 'Email Address',
                 filled: true,
                 fillColor: secondaryColor,
                 border: OutlineInputBorder(
@@ -98,25 +89,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _sending ? null : _sendReset,
+              onPressed: _sending ? null : _sendOTP,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
-                foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 50),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: _sending
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Send Reset Link'),
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Send Code', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),

@@ -119,7 +119,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Join MedPal+ to manage your health.',
+              'Join MedPal to manage your health.',
               style: TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 30),

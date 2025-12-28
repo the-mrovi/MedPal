@@ -11,16 +11,15 @@ class AuthService {
   Future<void> signInWithGoogle() async {
     String? redirectUrl;
     if (kIsWeb) {
-      // DYNAMIC REDIRECT: Automatically gets your current local port
       redirectUrl = Uri.base.origin;
     } else {
-      // MOBILE REDIRECT: Scheme for your Android phone
       redirectUrl = 'io.supabase.medpal://login-callback/';
     }
 
     await _supabase.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: redirectUrl,
+      queryParams: {'prompt': 'select_account'},
     );
   }
 
@@ -50,52 +49,58 @@ class AuthService {
 
   Future<void> signOut() async => await _supabase.auth.signOut();
 
-  Future<void> sendPasswordResetEmail({
+  // --- PASSWORD RESET (OTP FLOW) ---
+
+  Future<void> sendPasswordResetOTP(String email) async {
+    await _supabase.auth.resetPasswordForEmail(email);
+  }
+
+  Future<void> verifyOTPAndResetPassword({
     required String email,
-    String? redirectTo,
+    required String otp,
+    required String newPassword,
   }) async {
-    await _supabase.auth.resetPasswordForEmail(email, redirectTo: redirectTo);
+    await _supabase.auth.verifyOTP(
+      email: email,
+      token: otp,
+      type: OtpType.recovery,
+    );
+    await _supabase.auth.updateUser(UserAttributes(password: newPassword));
   }
 
-  // Helper for unique IDs
-  String _generateFamilyId() {
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    return 'MED-${ts.toRadixString(36).toUpperCase()}';
-  }
+  // 3. Updated Profile Completion (Fixed "User Not Found" error)
 
-  // 3. Profile Completion
   Future<String> completePatientProfileForCurrentUser(String userId) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('No user found');
+    // We remove the check for _supabase.auth.currentUser here.
+    // We use the userId passed from the screen instead.
 
-    final meta = user.userMetadata ?? {};
-    final name = (meta['full_name'] ?? 'User').toString();
-    final phone = (meta['phone'] ?? '').toString();
-    final familyId = _generateFamilyId();
+    final familyId =
+        'MED-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}';
 
-    await _supabase.from('profiles').upsert({
-      'id': userId,
-      'full_name': name,
-      'user_role': 'patient',
-    });
-    await _supabase.from('patients').upsert({
-      'id': userId,
-      'family_id': familyId,
-      'phone': phone,
-    });
-    return familyId;
+    try {
+      // Create profile record
+      await _supabase.from('profiles').upsert({
+        'id': userId,
+        'user_role': 'patient',
+      });
+
+      // Create patient record
+      await _supabase.from('patients').upsert({
+        'id': userId,
+        'family_id': familyId,
+      });
+
+      return familyId;
+    } catch (e) {
+      throw Exception('Database Error: $e');
+    }
   }
 
   Future<String> completeCaregiverProfileForCurrentUser({
+    required String userId, // Added userId parameter
     required String familyIdFromParent,
   }) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) throw Exception('Not authenticated.');
-
-    final meta = user.userMetadata ?? {};
-    final name = (meta['full_name'] ?? 'Caregiver').toString();
-    final phone = (meta['phone'] ?? '').toString();
-
+    // Find the patient linked to this family ID
     final patientData = await _supabase
         .from('patients')
         .select('id')
@@ -104,23 +109,26 @@ class AuthService {
 
     if (patientData == null) throw Exception('Family ID not found');
 
-    await _supabase.from('profiles').upsert({
-      'id': user.id,
-      'full_name': name,
-      'user_role': 'caregiver',
-    });
-    await _supabase.from('caregivers').upsert({'id': user.id, 'phone': phone});
-    await _supabase.from('patient_caregiver_link').upsert({
-      'patient_id': patientData['id'],
-      'caregiver_id': user.id,
-    });
+    try {
+      // Create profile record
+      await _supabase.from('profiles').upsert({
+        'id': userId,
+        'user_role': 'caregiver',
+      });
 
-    final patientProfile = await _supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', patientData['id'])
-        .maybeSingle();
-    return (patientProfile?['full_name'] ?? 'Patient').toString();
+      // Create caregiver record
+      await _supabase.from('caregivers').upsert({'id': userId});
+
+      // Link caregiver to patient
+      await _supabase.from('patient_caregiver_link').upsert({
+        'patient_id': patientData['id'],
+        'caregiver_id': userId,
+      });
+
+      return "Linked Successfully";
+    } catch (e) {
+      throw Exception('Failed to link caregiver: $e');
+    }
   }
 
   // --- Getters ---
@@ -166,7 +174,7 @@ class AuthService {
   }
 }
 
-// Top-level helpers for your screens
+// --- TOP-LEVEL HELPERS ---
 Future<void> signInWithGoogle() => AuthService.instance.signInWithGoogle();
 Future<AuthResponse> signUpBasic({
   required String email,
@@ -184,13 +192,31 @@ Future<AuthResponse> signIn({
   required String password,
 }) => AuthService.instance.signIn(email: email, password: password);
 Future<void> signOut() => AuthService.instance.signOut();
+
+Future<void> sendPasswordResetOTP(String email) =>
+    AuthService.instance.sendPasswordResetOTP(email);
+
+Future<void> verifyOTPAndResetPassword({
+  required String email,
+  required String otp,
+  required String newPassword,
+}) => AuthService.instance.verifyOTPAndResetPassword(
+  email: email,
+  otp: otp,
+  newPassword: newPassword,
+);
+
 Future<String> completePatientProfileForCurrentUser(String userId) =>
     AuthService.instance.completePatientProfileForCurrentUser(userId);
+
 Future<String> completeCaregiverProfileForCurrentUser({
+  required String userId, // Updated to pass userId
   required String familyIdFromParent,
 }) => AuthService.instance.completeCaregiverProfileForCurrentUser(
+  userId: userId,
   familyIdFromParent: familyIdFromParent,
 );
+
 Future<String?> getCurrentUserRole() =>
     AuthService.instance.getCurrentUserRole();
 Future<String?> getCurrentUserId() => AuthService.instance.getCurrentUserId();

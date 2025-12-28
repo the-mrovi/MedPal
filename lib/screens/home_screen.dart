@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:medpal/constants.dart';
-import 'package:medpal/auth/auth_service.dart'; // Standard import to access the class
+import 'package:medpal/auth/auth_service.dart';
 import 'package:medpal/screens/welcome_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -19,9 +19,12 @@ class HomeScreen extends StatelessWidget {
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () async {
               try {
-                // FIX 1: Access signOut through the Singleton instance
+                // Clear the session via Singleton
                 await AuthService.instance.signOut();
+
                 if (!context.mounted) return;
+
+                // Return to Welcome and clear the navigation stack
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const WelcomeScreen()),
                   (route) => false,
@@ -34,18 +37,16 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: FutureBuilder<String?>(
-        // FIX 2: Access role check through the Singleton instance
         future: AuthService.instance.getCurrentUserRole(),
         builder: (context, snapRole) {
           if (snapRole.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          
+
           final role = snapRole.data;
-          
+
           if (role == 'patient') {
             return FutureBuilder<String?>(
-              // FIX 3: Access family ID check through the Singleton instance
               future: AuthService.instance.getMyFamilyIdIfPatient(),
               builder: (context, snapFam) {
                 if (snapFam.connectionState == ConnectionState.waiting) {
@@ -61,7 +62,6 @@ class HomeScreen extends StatelessWidget {
             );
           } else if (role == 'caregiver') {
             return FutureBuilder<String?>(
-              // FIX 4: Access patient name check through the Singleton instance
               future: AuthService.instance.getLinkedPatientNameIfCaregiver(),
               builder: (context, snapName) {
                 if (snapName.connectionState == ConnectionState.waiting) {
@@ -87,7 +87,7 @@ class _InfoCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String value;
-  
+
   const _InfoCard({
     required this.title,
     required this.subtitle,
