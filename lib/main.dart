@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:medpal/constants.dart';
 import 'package:medpal/screens/welcome_screen.dart';
+import 'package:medpal/screens/add_routine_screen.dart';
+import 'package:medpal/screens/add_medicine_screen.dart';
 
 // 1. GLOBAL VARIABLE
 // This allows you to access the database from any screen in your app.
@@ -39,6 +41,10 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSwatch().copyWith(secondary: accentColor),
       ),
       home: const WelcomeScreen(),
+      routes: {
+        AddRoutineScreen.routeName: (_) => const AddRoutineScreen(),
+        AddMedicineScreen.routeName: (_) => const AddMedicineScreen(),
+      },
       debugShowCheckedModeBanner: false,
     );
   }
